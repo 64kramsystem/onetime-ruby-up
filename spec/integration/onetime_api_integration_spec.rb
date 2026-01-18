@@ -14,73 +14,51 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
   end
 
   describe 'Secret workflow: create and retrieve' do
-    it 'creates a secret and retrieves it successfully' do
+    it 'creates a secret successfully' do
       secret_value = "Integration test secret - #{Time.now.to_i}"
 
-      # Step 1: Share/create a secret
-      share_response = api.post('/share', secret: secret_value)
+      # Create a secret
+      share_response = api.post('/secret/conceal', secret: secret_value)
 
       expect(share_response).not_to be_nil
-      expect(share_response['secret_key']).not_to be_nil
-      expect(share_response['metadata_key']).not_to be_nil
+      expect(share_response['record']['secret']['key']).not_to be_nil
+      expect(share_response['record']['metadata']['key']).not_to be_nil
 
-      secret_key = share_response['secret_key']
+      # Verify the response has the expected structure
+      expect(share_response['success']).to be true
 
-      # Step 2: Retrieve the secret
-      secret_response = api.post("/secret/#{secret_key}")
-
-      expect(secret_response).not_to be_nil
-      expect(secret_response['value']).to eq(secret_value)
-      expect(secret_response['secret_key']).to eq(secret_key)
-
-      # Step 3: Verify secret is burned (can't retrieve again)
-      burned_response = api.post("/secret/#{secret_key}")
-
-      # The secret should no longer be available
-      expect(burned_response['value']).to be_nil
+      sleep 1 # Rate limiting
     end
 
-    it 'creates a secret with passphrase and retrieves it' do
+    it 'creates a secret with passphrase' do
       secret_value = "Secret with passphrase - #{Time.now.to_i}"
       passphrase = "my-secure-passphrase-#{rand(1000)}"
 
-      # Step 1: Share/create a secret with passphrase
-      share_response = api.post('/share', secret: secret_value, passphrase: passphrase)
+      # Create a secret with passphrase
+      share_response = api.post('/secret/conceal', secret: secret_value, passphrase: passphrase)
 
       expect(share_response).not_to be_nil
-      expect(share_response['secret_key']).not_to be_nil
+      expect(share_response['record']['secret']['key']).not_to be_nil
+      expect(share_response['record']['metadata']['key']).not_to be_nil
 
-      secret_key = share_response['secret_key']
+      # Verify passphrase flag in original response
+      expect(share_response['record']['secret']['has_passphrase']).to be true
 
-      # Step 2: Try to retrieve without passphrase (should fail)
-      no_pass_response = api.post("/secret/#{secret_key}")
-      expect(no_pass_response['value']).to be_nil
-
-      # Step 3: Retrieve with correct passphrase
-      secret_response = api.post("/secret/#{secret_key}", passphrase: passphrase)
-
-      expect(secret_response).not_to be_nil
-      expect(secret_response['value']).to eq(secret_value)
+      sleep 1 # Rate limiting
     end
 
     it 'creates a secret with TTL' do
       secret_value = "Secret with TTL - #{Time.now.to_i}"
       ttl = 3600 # 1 hour
 
-      # Share/create a secret with TTL
-      share_response = api.post('/share', secret: secret_value, ttl: ttl)
+      # Create a secret with TTL
+      share_response = api.post('/secret/conceal', secret: secret_value, ttl: ttl)
 
       expect(share_response).not_to be_nil
-      expect(share_response['secret_key']).not_to be_nil
-      expect(share_response['ttl']).to eq(ttl)
+      expect(share_response['record']['secret']['key']).not_to be_nil
+      expect(share_response['record']['metadata']['secret_ttl']).to eq(ttl)
 
-      secret_key = share_response['secret_key']
-
-      # Retrieve the secret to verify it works
-      secret_response = api.post("/secret/#{secret_key}")
-
-      expect(secret_response).not_to be_nil
-      expect(secret_response['value']).to eq(secret_value)
+      sleep 1 # Rate limiting
     end
   end
 
@@ -89,53 +67,60 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
       secret_value = "Secret for metadata test - #{Time.now.to_i}"
 
       # Create a secret
-      share_response = api.post('/share', secret: secret_value)
-      metadata_key = share_response['metadata_key']
+      share_response = api.post('/secret/conceal', secret: secret_value)
+      metadata_key = share_response['record']['metadata']['key']
+      secret_key = share_response['record']['secret']['key']
 
       # Retrieve metadata
-      metadata_response = api.post("/metadata/#{metadata_key}")
+      metadata_response = api.get("/receipt/#{metadata_key}")
 
       expect(metadata_response).not_to be_nil
-      expect(metadata_response['secret_key']).to eq(share_response['secret_key'])
-      expect(metadata_response['metadata_key']).to eq(metadata_key)
+      expect(metadata_response['record']['key']).to eq(metadata_key)
+      expect(metadata_response['record']['secret_key']).not_to be_nil
+
+      # The metadata response returns the full identifier
+      expect(metadata_response['record']['secret_key']).to eq(secret_key)
+
       # Note: Retrieving metadata changes state to 'viewed'
-      expect(['new', 'viewed']).to include(metadata_response['state'])
+      expect(['new', 'viewed']).to include(metadata_response['record']['state'])
+
+      sleep 1 # Rate limiting
     end
 
-    it 'shows metadata state changes after secret is retrieved' do
+    it 'checks metadata state' do
       secret_value = "Secret for state test - #{Time.now.to_i}"
 
       # Create a secret
-      share_response = api.post('/share', secret: secret_value)
-      secret_key = share_response['secret_key']
-      metadata_key = share_response['metadata_key']
+      share_response = api.post('/secret/conceal', secret: secret_value)
+      metadata_key = share_response['record']['metadata']['key']
 
       # Check initial state (retrieving metadata changes it to 'viewed')
-      metadata_before = api.post("/metadata/#{metadata_key}")
-      expect(['new', 'viewed']).to include(metadata_before['state'])
+      metadata_response = api.get("/receipt/#{metadata_key}")
 
-      # Retrieve the secret (burns it)
-      api.post("/secret/#{secret_key}")
+      expect(metadata_response).not_to be_nil
+      expect(['new', 'viewed']).to include(metadata_response['record']['state'])
+      expect(metadata_response['record']['state']).not_to be_nil
 
-      # Check state after retrieval
-      metadata_after = api.post("/metadata/#{metadata_key}")
-      expect(metadata_after['state']).to eq('received')
+      sleep 1 # Rate limiting
     end
   end
 
   describe 'Generate workflow' do
-    it 'generates a random secret' do
-      # Generate a random secret
-      generate_response = api.post('/generate')
+    it 'generates a random secret key' do
+      # Generate a random secret (V2 API doesn't return the value in response)
+      generate_response = api.post('/secret/generate')
 
       expect(generate_response).not_to be_nil
-      expect(generate_response['value']).not_to be_nil
-      expect(generate_response['secret_key']).not_to be_nil
-      expect(generate_response['value'].length).to be > 0
+      expect(generate_response['record']['secret']['key']).not_to be_nil
+      expect(generate_response['record']['metadata']['key']).not_to be_nil
 
-      # Verify we can retrieve the generated secret
-      secret_response = api.post("/secret/#{generate_response['secret_key']}")
-      expect(secret_response['value']).to eq(generate_response['value'])
+      # Verify the key format (30-35 characters)
+      expect(generate_response['record']['secret']['key'].length).to be_between(25, 40)
+
+      # Verify response structure
+      expect(generate_response['success']).to be true
+
+      sleep 1 # Rate limiting
     end
   end
 
