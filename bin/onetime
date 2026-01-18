@@ -29,7 +29,7 @@ class Onetime::CLI
     end
 
     global :V, :version do
-      puts OT::API::VERSION
+      puts OT::VERSION
       exit 0
     end
 

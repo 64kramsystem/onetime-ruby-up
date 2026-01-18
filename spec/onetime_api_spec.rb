@@ -2,22 +2,12 @@ require 'spec_helper'
 
 RSpec.describe Onetime::API do
   describe 'VERSION' do
-    it 'reads version from VERSION file' do
-      expect(Onetime::API::VERSION.to_s).to match(/^\d+\.\d+\.\d+$/)
+    it 'is defined as a string constant' do
+      expect(Onetime::VERSION).to match(/^\d+\.\d+\.\d+$/)
     end
 
     it 'returns version as string' do
-      expect(Onetime::API::VERSION.to_s).to be_a(String)
-    end
-
-    it 'returns version as array' do
-      version_array = Onetime::API::VERSION.to_a
-      expect(version_array).to be_an(Array)
-      expect(version_array.length).to eq(3)
-    end
-
-    it 'reports prerelease status' do
-      expect(Onetime::API::VERSION.prerelease?).to be false
+      expect(Onetime::VERSION).to be_a(String)
     end
   end
 
@@ -451,7 +441,7 @@ RSpec.describe Onetime::API do
       stub = stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/conceal")
         .with(
           headers: {
-            'X-Onetime-Client' => "ruby: #{RUBY_VERSION}/#{Onetime::API::VERSION}",
+            'X-Onetime-Client' => "ruby: #{RUBY_VERSION}/#{Onetime::VERSION}",
             'Content-Type' => 'application/json',
             'Accept' => 'application/json'
           }
