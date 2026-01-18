@@ -1,48 +1,29 @@
 Gem::Specification.new do |s|
-  s.name = "onetime"
-  s.version = "0.5.1"
+  s.name        = "onetime"
+  s.version     = "0.5.1"
+  s.authors     = ["Delano Mandelbaum"]
+  s.email       = "delano@onetimesecret.com"
+  s.homepage    = "https://github.com/onetimesecret/onetime-ruby"
+  s.summary     = "Command-line tool and library for onetimesecret.com API"
+  s.description = "A Ruby library and command-line tool for sharing secrets securely using the onetimesecret.com API. Create and retrieve one-time secret links for sensitive information."
+  s.licenses    = ["MIT"]
 
-  s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
-  s.authors = ["Delano Mandelbaum"]
-  s.date = "2013-02-12"
-  s.description = "Command-line tool and library for onetimesecret.com API"
-  s.email = "delano@onetimesecret.com"
-  s.executables = ["onetime"]
-  s.extra_rdoc_files = [
-    "LICENSE.txt",
-    "README.md"
-  ]
-  s.files = [
-    "CHANGES.txt",
-    "LICENSE.txt",
-    "README.md",
-    "VERSION",
-    "bin/onetime",
-    "gem-public_cert.pem",
-    "lib/onetime/api.rb",
-    "onetime.gemspec"
-  ]
-  s.homepage = "https://github.com/onetimesecret/onetime-ruby"
+  s.required_ruby_version = ">= 3.2"
+  s.required_rubygems_version = ">= 2.0.0"
+
+  s.metadata = {
+    "bug_tracker_uri"       => "https://github.com/onetimesecret/onetime-ruby/issues",
+    "changelog_uri"         => "https://github.com/onetimesecret/onetime-ruby/blob/master/CHANGELOG.md",
+    "source_code_uri"       => "https://github.com/onetimesecret/onetime-ruby",
+    "rubygems_mfa_required" => "true"
+  }
+
+  s.files         = Dir["lib/**/*", "bin/*", "LICENSE.txt", "README.md", "CHANGELOG.md"].reject { |f| File.directory?(f) }
+  s.executables   = Dir["bin/*"].map { |f| File.basename(f) }
   s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.25"
-  s.summary = "Command-line tool and library for onetimesecret.com API"
 
-  if s.respond_to? :specification_version then
-    s.specification_version = 3
-
-    if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
-      s.add_runtime_dependency(%q<drydock>, [">= 0.6.9"])
-      s.add_runtime_dependency(%q<httparty>, [">= 0.7.7"])
-      s.add_runtime_dependency(%q<json>, [">= 1.6.8"])
-    else
-      s.add_dependency(%q<drydock>, [">= 0.6.9"])
-      s.add_dependency(%q<httparty>, [">= 0.7.7"])
-      s.add_dependency(%q<json>, [">= 1.6.8"])
-    end
-  else
-    s.add_dependency(%q<drydock>, [">= 0.6.9"])
-    s.add_dependency(%q<httparty>, [">= 0.7.7"])
-    s.add_dependency(%q<json>, [">= 1.6.8"])
-  end
+  s.add_runtime_dependency "drydock", "~> 0.6", ">= 0.6.9"
+  s.add_runtime_dependency "httparty", "~> 0.7", ">= 0.7.7"
+  s.add_runtime_dependency "json", "~> 1.6", ">= 1.6.8"
 end
 
