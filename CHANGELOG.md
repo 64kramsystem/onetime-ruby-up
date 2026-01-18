@@ -4,9 +4,10 @@
 
 ### Added
 
-Major changes:
+Major/breaking changes:
 
 - Upgrade to API v2
+- Rename command "metadata" to "receipt"
 
 Other changes:
 

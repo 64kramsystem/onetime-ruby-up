@@ -67,10 +67,10 @@ class Onetime::CLI
     end
 
     argv :key
-    usage "onetime metadata <KEY>"
-    command :metadata do |obj|
+    usage "onetime receipt <KEY>"
+    command :receipt do |obj|
       raise RuntimeError, "csv not supported" if obj.global.format == 'csv'
-      raise RuntimeError, "Usage: #{$0} metadata <KEY>" unless obj.argv.key
+      raise RuntimeError, "Usage: #{$0} receipt <KEY>" unless obj.argv.key
       @res = @api.get '/receipt/%s' % obj.argv.key
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
