@@ -23,7 +23,6 @@ Gem::Specification.new do |s|
   s.require_paths = ["lib"]
 
   s.add_runtime_dependency "drydock", "~> 0.6", ">= 0.6.9"
-  s.add_runtime_dependency "httparty", "~> 0.7", ">= 0.7.7"
-  s.add_runtime_dependency "json", "~> 1.6", ">= 1.6.8"
+  s.add_runtime_dependency "httparty", ">= 0.7.7"
 end
 
