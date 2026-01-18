@@ -91,7 +91,7 @@ module Onetime
     def api_path *args
       args.unshift ['', "v#{apiversion}"] # force leading slash and version
       path = args.flatten.join('/')
-      path.gsub '//', '/'
+      path.gsub(/\/+/, '/')
     end
     private
     def execute_request meth, path, opts
@@ -108,7 +108,7 @@ module Onetime
       def web_path *args
         args.unshift [''] # force leading slash
         path = args.flatten.join('/')
-        path.gsub '//', '/'
+        path.gsub(/\/+/, '/')
       end
       def indifferent_params(params)
         if params.is_a?(Hash)
