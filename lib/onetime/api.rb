@@ -54,16 +54,14 @@ module Onetime
   end
   class API
     include HTTParty
-    base_uri 'https://onetimesecret.com/api'
+    base_uri 'https://eu.onetimesecret.com/api'
     format :json
     headers 'X-Onetime-Client' => 'ruby: %s/%s' % [RUBY_VERSION, Onetime::API::VERSION.to_s]
     attr_reader :opts, :response, :custid, :key, :default_params, :anonymous
-    attr_accessor :apiversion
     def initialize custid=nil, key=nil, opts={}
       unless ENV['ONETIME_HOST'].to_s.empty?
         self.class.base_uri ENV['ONETIME_HOST']
       end
-      @apiversion = opts.delete(:apiversion) || opts.delete('apiversion') || 1
       @opts = opts
       @default_params = {}
       @custid = custid || ENV['ONETIME_CUSTID']
@@ -85,11 +83,26 @@ module Onetime
     end
     def post path, params=nil
       opts = self.opts.clone
-      opts[:body] = (params || {}).merge default_params
+      body_params = (params || {}).merge default_params
+
+      # V2 API uses JSON format
+      opts[:headers] = (opts[:headers] || {}).merge({
+        'Content-Type' => 'application/json',
+        'Accept' => 'application/json'
+      })
+
+      # Only /secret/conceal and /secret/generate wrap params in "secret" key
+      # Other endpoints (reveal, burn, etc.) do NOT wrap
+      if path =~ /\/secret\/(conceal|generate)$/
+        body_params = { secret: body_params }
+      end
+
+      opts[:body] = body_params.to_json
+
       execute_request :post, path, opts
     end
     def api_path *args
-      args.unshift ['', "v#{apiversion}"] # force leading slash and version
+      args.unshift ['', 'v2'] # force leading slash and v2 version
       path = args.flatten.join('/')
       path.gsub(/\/+/, '/')
     end
@@ -97,7 +110,8 @@ module Onetime
     def execute_request meth, path, opts
       path = api_path [path]
       @response = self.class.send meth, path, opts
-      self.class.indifferent_params @response.parsed_response
+      result = self.class.indifferent_params @response.parsed_response
+      result
     end
     class << self
       def web_uri *args
