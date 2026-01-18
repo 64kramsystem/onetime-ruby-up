@@ -1,6 +1,8 @@
+require_relative "lib/onetime/version"
+
 Gem::Specification.new do |s|
   s.name        = "onetime-up"
-  s.version     = "0.6.0"
+  s.version     = Onetime::VERSION
   s.authors     = [
     "Delano Mandelbaum",
     "Saverio Miroddi",

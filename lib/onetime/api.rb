@@ -2,6 +2,7 @@
 
 require 'httparty'
 require 'uri'
+require_relative 'version'
 
 begin
   require 'yajl-ruby'
@@ -34,29 +35,12 @@ module Onetime
     unless defined?(Onetime::API::HOME)
       HOME = File.expand_path File.join(File.dirname(__FILE__), '..', '..')
     end
-    module VERSION
-      @path = File.join(Onetime::API::HOME, 'VERSION')
-      class << self
-        attr_reader :version, :path
-        def version
-          @version || read_version
-        end
-        def read_version
-          return if @version
-          @version = File.read(path).strip!
-        end
-        def prerelease?() false end
-        def to_a()     version.split('.')   end
-        def to_s()     version              end
-        def inspect()  version              end
-      end
-    end
   end
   class API
     include HTTParty
     base_uri 'https://eu.onetimesecret.com/api'
     format :json
-    headers 'X-Onetime-Client' => 'ruby: %s/%s' % [RUBY_VERSION, Onetime::API::VERSION.to_s]
+    headers 'X-Onetime-Client' => 'ruby: %s/%s' % [RUBY_VERSION, Onetime::VERSION]
     attr_reader :opts, :response, :custid, :key, :default_params, :anonymous
     def initialize custid=nil, key=nil, opts={}
       unless ENV['ONETIME_HOST'].to_s.empty?
