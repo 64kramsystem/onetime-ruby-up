@@ -24,5 +24,8 @@ Gem::Specification.new do |s|
 
   s.add_runtime_dependency "drydock", "~> 0.6", ">= 0.6.9"
   s.add_runtime_dependency "httparty", ">= 0.7.7"
+
+  s.add_development_dependency "rspec", "~> 3.0"
+  s.add_development_dependency "webmock", "~> 3.0"
 end
 
