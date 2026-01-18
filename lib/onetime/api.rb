@@ -54,7 +54,7 @@ module Onetime
   end
   class API
     include HTTParty
-    base_uri 'https://onetimesecret.com/api'
+    base_uri 'https://eu.onetimesecret.com/api'
     format :json
     headers 'X-Onetime-Client' => 'ruby: %s/%s' % [RUBY_VERSION, Onetime::API::VERSION.to_s]
     attr_reader :opts, :response, :custid, :key, :default_params, :anonymous
@@ -63,7 +63,7 @@ module Onetime
       unless ENV['ONETIME_HOST'].to_s.empty?
         self.class.base_uri ENV['ONETIME_HOST']
       end
-      @apiversion = opts.delete(:apiversion) || opts.delete('apiversion') || 1
+      @apiversion = opts.delete(:apiversion) || opts.delete('apiversion') || 2
       @opts = opts
       @default_params = {}
       @custid = custid || ENV['ONETIME_CUSTID']

@@ -13,7 +13,7 @@ class Onetime::CLI
 
     default :share
 
-    global :H, String, "Base URI (e.g. https://onetimesecret.com/api)"
+    global :H, String, "Base URI (e.g. https://us.onetimesecret.com/api)"
     global :c, :custid, String, "Customer ID (e.g. you@yourcompany.com)"
     global :k, :apikey, String, "API key (e.g. 4eb33c6340006d6607c813fc7e707a32f8bf5342)"
 
@@ -71,7 +71,7 @@ class Onetime::CLI
     command :metadata do |obj|
       raise RuntimeError, "csv not supported" if obj.global.format == 'csv'
       raise RuntimeError, "Usage: #{$0} metadata <KEY>" unless obj.argv.key
-      @res = @api.post '/metadata/%s' % obj.argv.key
+      @res = @api.post '/private/%s' % obj.argv.key
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
@@ -100,7 +100,7 @@ class Onetime::CLI
       if obj.argv.key =~ /#{base_uri.hostname}\/secret\/([a-zA-Z0-9]+)/
         obj.argv.key = $1
       end
-      @res = @api.post '/secret/%s' % [obj.argv.key], opts
+      @res = @api.post '/secret/%s/reveal' % [obj.argv.key], opts
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
@@ -141,7 +141,7 @@ class Onetime::CLI
       raise RuntimeError, "No secret provided" if secret_value.chomp.empty?
       opts = { :secret => secret_value, :ttl => obj.option.ttl, :recipient => recipients }
       opts[:passphrase] = obj.option.passphrase if obj.option.passphrase
-      @res = @api.post '/share', opts
+      @res = @api.post '/secret/conceal', opts
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
@@ -171,7 +171,7 @@ class Onetime::CLI
       recipients = [obj.option.recipient, obj.global.recipient].flatten.compact.uniq
       opts = { :ttl => obj.option.ttl, :recipient => recipients }
       opts[:passphrase] = obj.option.passphrase if obj.option.passphrase
-      @res = @api.post '/generate', opts
+      @res = @api.post '/secret/generate', opts
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
