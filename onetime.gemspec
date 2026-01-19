@@ -15,6 +15,7 @@ Gem::Specification.new do |s|
   s.summary     = "Command-line tool and library for onetimesecret.com API (API v2)"
   s.description = "A Ruby library and command-line tool for sharing secrets securely using the onetimesecret.com API. Create and retrieve one-time secret links for sensitive information."
   s.licenses    = ["MIT"]
+  s.date        = "2026-01-19"
 
   s.required_ruby_version = ">= 3.2"
   s.required_rubygems_version = ">= 2.0.0"
