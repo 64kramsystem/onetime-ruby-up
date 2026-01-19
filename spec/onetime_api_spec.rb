@@ -244,33 +244,37 @@ RSpec.describe Onetime::API do
       it 'retrieves a secret by key' do
         stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/abc123/reveal")
           .with(
+            body: { 'continue' => true }.to_json,
             headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' }
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789","value":"mysecret"},"metadata":{}},"details":{}}',
+            body: '{"success":true,"record":{"identifier":"abc123def456ghi789","key":"abc123def456ghi789","state":"received","secret_ttl":"604800","lifespan":"604800","shortkey":"abc123","has_passphrase":false,"verification":false,"is_truncated":false,"created":"1768808000","updated":"1768808000","secret_value":"mysecret"},"details":{"continue":true,"is_owner":false,"show_secret":true,"correct_passphrase":false,"display_lines":4,"one_liner":true}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
-        response = api.post('/secret/abc123/reveal')
-        expect(response['record']['secret']['value']).to eq('mysecret')
-        expect(response['record']['secret']['key']).to eq('abc123def456ghi789')
+        response = api.post('/secret/abc123/reveal', continue: true)
+        expect(response['record']['secret_value']).to eq('mysecret')
+        expect(response['record']['key']).to eq('abc123def456ghi789')
+        expect(response['details']['show_secret']).to be true
       end
 
       it 'retrieves a secret with passphrase' do
         stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/abc123/reveal")
           .with(
-            body: { 'passphrase' => 'mypass' }.to_json,
+            body: { 'passphrase' => 'mypass', 'continue' => true }.to_json,
             headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' }
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789","value":"mysecret"},"metadata":{}},"details":{}}',
+            body: '{"success":true,"record":{"identifier":"abc123def456ghi789","key":"abc123def456ghi789","state":"received","secret_ttl":"604800","lifespan":"604800","shortkey":"abc123","has_passphrase":true,"verification":false,"is_truncated":false,"created":"1768808000","updated":"1768808000","secret_value":"mysecret"},"details":{"continue":true,"is_owner":false,"show_secret":true,"correct_passphrase":true,"display_lines":4,"one_liner":true}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
-        response = api.post('/secret/abc123/reveal', passphrase: 'mypass')
-        expect(response['record']['secret']['value']).to eq('mysecret')
+        response = api.post('/secret/abc123/reveal', passphrase: 'mypass', continue: true)
+        expect(response['record']['secret_value']).to eq('mysecret')
+        expect(response['details']['correct_passphrase']).to be true
+        expect(response['details']['show_secret']).to be true
       end
     end
 
