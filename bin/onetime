@@ -71,7 +71,11 @@ class Onetime::CLI
     command :receipt do |obj|
       raise RuntimeError, "csv not supported" if obj.global.format == 'csv'
       raise RuntimeError, "Usage: #{$0} receipt <KEY>" unless obj.argv.key
-      @res = @api.get '/receipt/%s' % obj.argv.key
+
+      # Handle case where argv.key might be an array due to drydock parsing
+      receipt_key = Array(obj.argv.key).first.to_s
+
+      @res = @api.get '/receipt/%s' % receipt_key
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
@@ -94,13 +98,17 @@ class Onetime::CLI
     command :secret do |obj|
       raise RuntimeError, "csv not supported" if obj.global.format == 'csv'
       raise RuntimeError, "Usage: #{$0} secret <KEY>" unless obj.argv.key
-      opts = {}
+
+      # Handle case where argv.key might be an array due to drydock parsing
+      secret_key = Array(obj.argv.key).first.to_s
+
+      opts = { continue: true }
       opts[:passphrase] = obj.option.passphrase if obj.option.passphrase
       base_uri = URI.parse Onetime::API.base_uri
-      if obj.argv.key =~ /#{base_uri.hostname}\/secret\/([a-zA-Z0-9]+)/
-        obj.argv.key = $1
+      if secret_key =~ /#{base_uri.hostname}\/secret\/([a-zA-Z0-9]+)/
+        secret_key = $1
       end
-      @res = @api.post '/secret/%s/reveal' % [obj.argv.key], opts
+      @res = @api.post '/secret/%s/reveal' % [secret_key], opts
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
@@ -112,7 +120,7 @@ class Onetime::CLI
       when 'yaml'
         puts @res.to_yaml
       else
-        value = @res['record'] && @res['record']['value']
+        value = @res.dig('record', 'secret_value')
         puts value if value
       end
     end
