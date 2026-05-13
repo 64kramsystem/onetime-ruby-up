@@ -1,5 +1,6 @@
 require 'spec_helper'
 require 'open3'
+require 'tempfile'
 
 RSpec.describe 'Onetime CLI', :cli do
   let(:bin_path) { File.expand_path('../../bin/onetime', __FILE__) }
@@ -36,6 +37,13 @@ RSpec.describe 'Onetime CLI', :cli do
       result = run_cli('receipt')
       expect(result[:exitcode]).to eq(1)
       expect(result[:stderr]).to match(/Usage.*receipt/i)
+    end
+
+    it 'errors when share is given a non-existing file path' do
+      result = run_cli('share', '/tmp/onetime-no-such-file-xyz123')
+      expect(result[:exitcode]).to eq(1)
+      combined = result[:stdout] + result[:stderr]
+      expect(combined).to match(/no such file/i)
     end
   end
 
@@ -141,6 +149,24 @@ RSpec.describe 'Onetime CLI', :cli do
       result = run_cli('secret', '-p', 'wrongpass', secret_key)
       expect(result[:exitcode]).to eq(1) # Command fails with wrong passphrase
       expect(result[:stdout].strip).to be_empty # No secret value displayed
+    end
+
+    it 'shares the contents of a file when given as a positional argument' do
+      Tempfile.create('share-from-file') do |f|
+        f.write("file-content-payload\n")
+        f.flush
+        share = run_cli('share', f.path)
+        expect(share[:exitcode]).to eq(0)
+        expect(share[:stdout]).to match(/https:\/\/.*\/secret\/[a-z0-9]+/)
+        expect(share[:stderr]).not_to include('Paste message here')
+        secret_key = share[:stdout].strip.split('/').last
+
+        wait_for_rate_limit
+
+        retrieve = run_cli('secret', secret_key)
+        expect(retrieve[:exitcode]).to eq(0)
+        expect(retrieve[:stdout]).to include('file-content-payload')
+      end
     end
 
     it 'extracts key from full URL' do
