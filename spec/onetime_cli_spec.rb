@@ -188,6 +188,20 @@ RSpec.describe 'Onetime CLI', :cli do
       expect(json['success']).to be true
       expect(json['record']).to have_key('secret')
     end
+
+    it 'errors when extra positional arguments are passed' do
+      result = run_cli('generate', '/tmp/some-file.csv')
+      expect(result[:exitcode]).to eq(1)
+      expect(result[:stderr]).to match(/takes no arguments/i)
+      expect(result[:stderr]).to match(/onetime share/)
+    end
+
+    it 'errors when content is piped via stdin' do
+      result = run_cli('generate', stdin_data: "some payload\n")
+      expect(result[:exitcode]).to eq(1)
+      expect(result[:stderr]).to match(/stdin/i)
+      expect(result[:stderr]).to match(/onetime share/)
+    end
   end
 
   describe 'receipt command', :integration do

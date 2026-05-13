@@ -177,6 +177,13 @@ class Onetime::CLI
     option :p, :passphrase, String, "Passphrase to encrypt the secret (something only you and recipient know)"
     option :r, :recipient, Array, "Email address to deliver the secret link"
     command :generate do |obj|
+      extra_args = Array(obj.argv).flatten.compact
+      unless extra_args.empty?
+        raise RuntimeError, "generate takes no arguments (got: %s). Did you mean: onetime share < %s" % [extra_args.join(' '), extra_args.first]
+      end
+      if !$stdin.tty? && !$stdin.eof?
+        raise RuntimeError, "generate does not read stdin. Did you mean: onetime share"
+      end
       recipients = [obj.option.recipient, obj.global.recipient].flatten.compact.uniq
       opts = { :ttl => obj.option.ttl, :recipient => recipients }
       opts[:passphrase] = obj.option.passphrase if obj.option.passphrase
