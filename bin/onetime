@@ -131,10 +131,13 @@ class Onetime::CLI
     option :p, :passphrase, String, "Passphrase to encrypt the secret (something only you and recipient know)"
     option :r, :recipient, Array, "Email address to deliver the secret link"
     command :share do |obj|
+      file_args = Array(obj.argv).flatten.compact.select { |arg| File.file?(arg) }
       recipients = [obj.option.recipient, obj.global.recipient].flatten.compact.uniq
       begin
         if Kernel.select [$stdin], nil, nil, 0
           secret_value = STDIN.read
+        elsif !file_args.empty?
+          secret_value = ARGF.read
         else
           STDERR.puts "Paste message here (hit control-D to continue):"
           secret_value = ARGF.read
