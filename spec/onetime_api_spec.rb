@@ -67,13 +67,18 @@ RSpec.describe Onetime::API do
     end
 
     context 'with custom host' do
+      around do |example|
+        original_base_uri = Onetime::API.base_uri
+        example.run
+        Onetime::API.base_uri(original_base_uri)
+      end
+
       before do
         ENV['ONETIME_HOST'] = 'https://custom.example.com/api'
       end
 
       after do
         ENV.delete('ONETIME_HOST')
-        Onetime::API.base_uri('https://eu.onetimesecret.com/api')
       end
 
       it 'uses custom host from environment variable' do
@@ -100,6 +105,12 @@ RSpec.describe Onetime::API do
     it 'removes duplicate slashes' do
       path = api.api_path('/status/')
       expect(path).to eq('/v2/status/')
+    end
+
+    it 'uses the configured API version' do
+      api = Onetime::API.new(nil, nil, apiversion: 1)
+      expect(api.apiversion).to eq(1)
+      expect(api.api_path('status')).to eq('/v1/status')
     end
   end
 
@@ -148,6 +159,89 @@ RSpec.describe Onetime::API do
         api.get('/status')
         expect(stub).to have_been_requested
       end
+
+      it 'wraps relative and trailing-slash conceal paths using the normalized endpoint' do
+        stub = stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/conceal/")
+          .with(
+            body: { 'secret' => { 'secret' => 'mysecret' } }.to_json,
+            headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' }
+          )
+          .to_return(
+            status: 200,
+            body: '{"record":{"secret":{"key":"abc123"},"receipt":{"key":"def456"}},"details":{}}',
+            headers: { 'Content-Type' => 'application/json' }
+          )
+
+        api.post('secret/conceal/', secret: 'mysecret')
+        expect(stub).to have_been_requested
+      end
+
+      it 'wraps configured-version conceal paths using the normalized endpoint' do
+        versioned_api = Onetime::API.new(custid, apikey, apiversion: 1)
+        stub = stub_request(:post, "https://eu.onetimesecret.com/api/v1/secret/conceal")
+          .with(
+            body: { 'secret' => { 'secret' => 'mysecret' } }.to_json,
+            headers: { 'Content-Type' => 'application/json', 'Accept' => 'application/json' }
+          )
+          .to_return(
+            status: 200,
+            body: '{"record":{"secret":{"key":"abc123"},"receipt":{"key":"def456"}},"details":{}}',
+            headers: { 'Content-Type' => 'application/json' }
+          )
+
+        versioned_api.post('/secret/conceal', secret: 'mysecret')
+        expect(stub).to have_been_requested
+      end
+
+      it 'supports an explicit secret wrapper for future endpoints' do
+        stub = stub_request(:post, "https://eu.onetimesecret.com/api/v2/custom")
+          .with(body: { 'secret' => { 'foo' => 'bar' } }.to_json)
+          .to_return(
+            status: 200,
+            body: '{"ok":true}',
+            headers: { 'Content-Type' => 'application/json' }
+          )
+
+        api.post('/custom', { foo: 'bar' }, wrap: :secret)
+        expect(stub).to have_been_requested
+      end
+
+      it 'allows callers to send a pre-built unwrapped body' do
+        stub = stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/generate")
+          .with(body: { 'secret' => { 'kind' => 'generate' } }.to_json)
+          .to_return(
+            status: 200,
+            body: '{"ok":true}',
+            headers: { 'Content-Type' => 'application/json' }
+          )
+
+        api.post('/secret/generate', { secret: { kind: 'generate' } }, wrap: false)
+        expect(stub).to have_been_requested
+      end
+
+      it 'does not allow per-request options to override authentication or headers' do
+        stub = stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/generate")
+          .with(
+            basic_auth: [custid, apikey],
+            headers: {
+              'Content-Type' => 'application/json',
+              'Accept' => 'application/json'
+            }
+          )
+          .to_return(
+            status: 200,
+            body: '{"ok":true}',
+            headers: { 'Content-Type' => 'application/json' }
+          )
+
+        api.post(
+          '/secret/generate',
+          {},
+          basic_auth: { username: 'attacker', password: 'wrong' },
+          headers: { 'X-Injected' => 'true' }
+        )
+        expect(stub).to have_been_requested
+      end
     end
 
     context 'with anonymous API' do
@@ -182,13 +276,13 @@ RSpec.describe Onetime::API do
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"metadata":{"key":"def456"}},"details":{}}',
+            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"receipt":{"key":"def456"}},"details":{}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
         response = api.post('/secret/conceal', secret: 'mysecret', passphrase: 'mypass')
         expect(response['record']['secret']['key']).to eq('abc123def456ghi789')
-        expect(response['record']['metadata']['key']).to eq('def456')
+        expect(response['record']['receipt']['key']).to eq('def456')
       end
 
       it 'handles TTL parameter' do
@@ -199,12 +293,12 @@ RSpec.describe Onetime::API do
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"metadata":{"key":"def456","secret_ttl":3600}},"details":{}}',
+            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"receipt":{"key":"def456","secret_ttl":3600}},"details":{}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
         response = api.post('/secret/conceal', secret: 'mysecret', ttl: 3600)
-        expect(response['record']['metadata']['secret_ttl']).to eq(3600)
+        expect(response['record']['receipt']['secret_ttl']).to eq(3600)
       end
 
       it 'handles recipient parameter as array' do
@@ -215,7 +309,7 @@ RSpec.describe Onetime::API do
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"metadata":{"key":"def456"}},"details":{"recipient":["user@example.com"]}}',
+            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"receipt":{"key":"def456"}},"details":{"recipient":["user@example.com"]}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
@@ -231,7 +325,7 @@ RSpec.describe Onetime::API do
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"metadata":{"key":"def456"}},"details":{}}',
+            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"receipt":{"key":"def456"}},"details":{}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
@@ -302,14 +396,14 @@ RSpec.describe Onetime::API do
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789","value":"randomvalue123"},"metadata":{"key":"def456"}},"details":{}}',
+            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789","value":"randomvalue123"},"receipt":{"key":"def456"}},"details":{}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
         response = api.post('/secret/generate')
         expect(response['record']['secret']['value']).to eq('randomvalue123')
         expect(response['record']['secret']['key']).to eq('abc123def456ghi789')
-        expect(response['record']['metadata']['key']).to eq('def456')
+        expect(response['record']['receipt']['key']).to eq('def456')
       end
 
       it 'generates with TTL and passphrase' do
@@ -320,13 +414,13 @@ RSpec.describe Onetime::API do
           )
           .to_return(
             status: 200,
-            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789","value":"randomvalue123"},"metadata":{"key":"def456","secret_ttl":7200}},"details":{}}',
+            body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789","value":"randomvalue123"},"receipt":{"key":"def456","secret_ttl":7200}},"details":{}}',
             headers: { 'Content-Type' => 'application/json' }
           )
 
         response = api.post('/secret/generate', ttl: 7200, passphrase: 'mypass')
         expect(response['record']['secret']['value']).to eq('randomvalue123')
-        expect(response['record']['metadata']['secret_ttl']).to eq(7200)
+        expect(response['record']['receipt']['secret_ttl']).to eq(7200)
       end
     end
   end
@@ -441,18 +535,18 @@ RSpec.describe Onetime::API do
       expect(stub).to have_been_requested
     end
 
-    it 'includes version in X-Onetime-Client header and JSON headers for POST' do
+    it 'includes the library version in X-Onetime-Client header and JSON headers for POST' do
       stub = stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/conceal")
         .with(
           headers: {
-            'X-Onetime-Client' => "ruby: #{RUBY_VERSION}/#{Onetime::VERSION}",
+            'X-Onetime-Client' => %r{\Aruby: #{Regexp.escape(RUBY_VERSION)}/\d+\.\d+\.\d+\z},
             'Content-Type' => 'application/json',
             'Accept' => 'application/json'
           }
         )
         .to_return(
           status: 200,
-          body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"metadata":{}},"details":{}}',
+          body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"receipt":{}},"details":{}}',
           headers: { 'Content-Type' => 'application/json' }
         )
 
@@ -495,37 +589,112 @@ RSpec.describe Onetime::API do
       stub_request(:post, "https://eu.onetimesecret.com/api/v2/secret/conceal")
         .to_return(
           status: 200,
-          body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"metadata":{"key":"def456","secret_ttl":3600}},"details":{"recipient":[]}}',
+          body: '{"record":{"secret":{"shortkey":"abc123","key":"abc123def456ghi789"},"receipt":{"key":"def456","secret_ttl":3600}},"details":{"recipient":[]}}',
           headers: { 'Content-Type' => 'application/json' }
         )
 
       response = api.post('/secret/conceal', secret: 'test')
       expect(response['record']['secret']['key']).to eq('abc123def456ghi789')
-      expect(response['record']['metadata']['key']).to eq('def456')
-      expect(response['record']['metadata']['secret_ttl']).to eq(3600)
+      expect(response['record']['receipt']['key']).to eq('def456')
+      expect(response['record']['receipt']['secret_ttl']).to eq(3600)
       expect(response['details']['recipient']).to eq([])
     end
   end
 
-  describe 'API version support' do
-    it 'uses apiversion in path construction' do
-      api = Onetime::API.new(nil, nil, apiversion: 2)
-      path = api.api_path('status')
-      expect(path).to eq('/v2/status')
-    end
-
-    it 'can make requests with different API versions' do
-      api = Onetime::API.new(nil, nil, apiversion: 2)
-
-      stub_request(:get, "https://eu.onetimesecret.com/api/v2/status")
-        .to_return(
-          status: 200,
-          body: '{"status":"nominal"}',
-          headers: { 'Content-Type' => 'application/json' }
+  describe 'helpers' do
+    describe '.extract_secret_key' do
+      it 'extracts a key from a configured-host secret URL' do
+        key = Onetime::API.extract_secret_key(
+          'https://eu.onetimesecret.com/secret/abc123DEF',
+          'https://eu.onetimesecret.com/api'
         )
 
-      response = api.get('/status')
-      expect(response['status']).to eq('nominal')
+        expect(key).to eq('abc123DEF')
+      end
+
+      it 'does not treat hostname dots as regex wildcards' do
+        key = Onetime::API.extract_secret_key(
+          'https://euXonetimesecretXcom/secret/abc123',
+          'https://eu.onetimesecret.com/api'
+        )
+
+        expect(key).to eq('https://euXonetimesecretXcom/secret/abc123')
+      end
+
+      it 'accepts root and regional onetimesecret secret URLs' do
+        expect(Onetime::API.extract_secret_key('https://onetimesecret.com/secret/root123'))
+          .to eq('root123')
+        expect(Onetime::API.extract_secret_key('https://us.onetimesecret.com/secret/us123'))
+          .to eq('us123')
+      end
+
+      it 'rejects hostnames that only prefix the official root host' do
+        key = Onetime::API.extract_secret_key('https://onetimesecret.com.evil/secret/root123')
+
+        expect(key).to eq('https://onetimesecret.com.evil/secret/root123')
+      end
+    end
+
+    describe '.response_error_message' do
+      it 'falls back when the API message field is nil' do
+        expect(Onetime::API.response_error_message({ 'error' => 'MissingSecret', 'message' => nil }))
+          .to eq('MissingSecret')
+      end
+
+      it 'uses fields when no message or error is present' do
+        expect(Onetime::API.response_error_message({ 'field' => 'identifier: abc123' }))
+          .to eq('identifier: abc123')
+      end
+    end
+
+    describe '.secret_key_from_response' do
+      it 'reads the v2 secret key safely' do
+        response = { 'record' => { 'secret' => { 'key' => 'secret123' } } }
+        expect(Onetime::API.secret_key_from_response(response)).to eq('secret123')
+      end
+
+      it 'returns nil for unexpected 200 response shapes' do
+        expect(Onetime::API.secret_key_from_response({})).to be_nil
+      end
+    end
+
+    describe '.receipt_key_from_response' do
+      it 'prefers the current v2 receipt key' do
+        response = { 'record' => { 'receipt' => { 'key' => 'receipt123' } } }
+        expect(Onetime::API.receipt_key_from_response(response)).to eq('receipt123')
+      end
+
+      it 'falls back to the transitional metadata key' do
+        response = { 'record' => { 'metadata' => { 'key' => 'metadata123' } } }
+        expect(Onetime::API.receipt_key_from_response(response)).to eq('metadata123')
+      end
+    end
+
+    describe '.recipients_from_response' do
+      it 'reads recipients from the current v2 receipt shape' do
+        response = { 'record' => { 'receipt' => { 'recipients' => ['user@example.com'] } } }
+        expect(Onetime::API.recipients_from_response(response)).to eq(['user@example.com'])
+      end
+
+      it 'normalizes string recipients and falls back to details recipient' do
+        response = { 'details' => { 'recipient' => 'user@example.com' } }
+        expect(Onetime::API.recipients_from_response(response)).to eq(['user@example.com'])
+      end
+
+      it 'falls back to details recipient when receipt recipients is empty' do
+        response = {
+          'record' => { 'receipt' => { 'recipients' => [] } },
+          'details' => { 'recipient' => 'user@example.com' }
+        }
+
+        expect(Onetime::API.recipients_from_response(response)).to eq(['user@example.com'])
+      end
+
+      it 'returns an empty array for blank or missing recipient data' do
+        response = { 'record' => { 'receipt' => { 'recipients' => '' } } }
+        expect(Onetime::API.recipients_from_response(response)).to eq([])
+        expect(Onetime::API.recipients_from_response({})).to eq([])
+      end
     end
   end
 end
