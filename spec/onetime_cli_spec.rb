@@ -5,9 +5,9 @@ RSpec.describe 'Onetime CLI', :cli do
   let(:bin_path) { File.expand_path('../../bin/onetime', __FILE__) }
   let(:lib_path) { File.expand_path('../../lib', __FILE__) }
 
-  def run_cli(*args)
+  def run_cli(*args, stdin_data: nil)
     cmd = ["ruby", "-I#{lib_path}", bin_path] + args
-    stdout, stderr, status = Open3.capture3(*cmd)
+    stdout, stderr, status = Open3.capture3(*cmd, stdin_data: stdin_data)
     { stdout: stdout, stderr: stderr, status: status, exitcode: status.exitstatus }
   end
 
@@ -55,7 +55,7 @@ RSpec.describe 'Onetime CLI', :cli do
       expect(result[:stderr]).not_to match(/Unknown option.*-y/i)
     end
 
-    it 'rejects flags placed after command arguments (gracefully)' do
+    it 'rejects flags placed after command arguments (gracefully)', :integration do
       # Before the fix, this would crash with "undefined method `=~' for Array"
       # After the fix, it should handle gracefully (though not ideal UX)
       result = run_cli('secret', 'DUMMYKEY', '-j')
@@ -91,15 +91,15 @@ RSpec.describe 'Onetime CLI', :cli do
   describe 'share and retrieve workflow', :integration do
     it 'creates and retrieves a secret' do
       # Create secret
-      stdout, _stderr, status = Open3.capture3("echo 'CLI test secret' | ruby -I#{lib_path} #{bin_path} share")
-      expect(status.exitstatus).to eq(0)
-      secret_url = stdout.strip
+      share = run_cli('share', stdin_data: "CLI test secret\n")
+      expect(share[:exitcode]).to eq(0)
+      secret_url = share[:stdout].strip
       expect(secret_url).to match(/https:\/\/.*\/secret\/[a-z0-9]+/)
 
       # Extract key
       secret_key = secret_url.split('/').last
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
 
       # Retrieve secret
       result = run_cli('secret', secret_key)
@@ -108,11 +108,11 @@ RSpec.describe 'Onetime CLI', :cli do
     end
 
     it 'creates secret with TTL and retrieves it' do
-      stdout, _stderr, status = Open3.capture3("echo 'TTL test' | ruby -I#{lib_path} #{bin_path} share -t 3600")
-      expect(status.exitstatus).to eq(0)
-      secret_key = stdout.strip.split('/').last
+      share = run_cli('share', '-t', '3600', stdin_data: "TTL test\n")
+      expect(share[:exitcode]).to eq(0)
+      secret_key = share[:stdout].strip.split('/').last
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('secret', secret_key)
       expect(result[:exitcode]).to eq(0)
@@ -120,11 +120,11 @@ RSpec.describe 'Onetime CLI', :cli do
     end
 
     it 'creates secret with passphrase and retrieves it' do
-      stdout, _stderr, status = Open3.capture3("echo 'Protected' | ruby -I#{lib_path} #{bin_path} share -p testpass123")
-      expect(status.exitstatus).to eq(0)
-      secret_key = stdout.strip.split('/').last
+      share = run_cli('share', '-p', 'testpass123', stdin_data: "Protected\n")
+      expect(share[:exitcode]).to eq(0)
+      secret_key = share[:stdout].strip.split('/').last
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('secret', '-p', 'testpass123', secret_key)
       expect(result[:exitcode]).to eq(0)
@@ -132,11 +132,11 @@ RSpec.describe 'Onetime CLI', :cli do
     end
 
     it 'fails to retrieve secret with wrong passphrase' do
-      stdout, _stderr, status = Open3.capture3("echo 'Protected2' | ruby -I#{lib_path} #{bin_path} share -p correctpass")
-      expect(status.exitstatus).to eq(0)
-      secret_key = stdout.strip.split('/').last
+      share = run_cli('share', '-p', 'correctpass', stdin_data: "Protected2\n")
+      expect(share[:exitcode]).to eq(0)
+      secret_key = share[:stdout].strip.split('/').last
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('secret', '-p', 'wrongpass', secret_key)
       expect(result[:exitcode]).to eq(1) # Command fails with wrong passphrase
@@ -144,11 +144,11 @@ RSpec.describe 'Onetime CLI', :cli do
     end
 
     it 'extracts key from full URL' do
-      stdout, _stderr, status = Open3.capture3("echo 'URL test' | ruby -I#{lib_path} #{bin_path} share")
-      expect(status.exitstatus).to eq(0)
-      secret_url = stdout.strip
+      share = run_cli('share', stdin_data: "URL test\n")
+      expect(share[:exitcode]).to eq(0)
+      secret_url = share[:stdout].strip
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('secret', secret_url)
       expect(result[:exitcode]).to eq(0)
@@ -174,7 +174,7 @@ RSpec.describe 'Onetime CLI', :cli do
       expect(result[:exitcode]).to eq(0)
       secret_key = result[:stdout].strip.split('/').last
 
-      sleep 1
+      wait_for_rate_limit
 
       retrieve_result = run_cli('secret', '-p', 'genpass', secret_key)
       expect(retrieve_result[:exitcode]).to eq(0)
@@ -193,11 +193,11 @@ RSpec.describe 'Onetime CLI', :cli do
   describe 'receipt command', :integration do
     it 'retrieves receipt metadata' do
       # First create a secret to get a metadata key
-      output = `echo 'Receipt test' | ruby -I#{lib_path} #{bin_path} -j share`
-      json = JSON.parse(output)
-      metadata_key = json['record']['metadata']['key']
+      share = run_cli('-j', 'share', stdin_data: "Receipt test\n")
+      json = JSON.parse(share[:stdout])
+      metadata_key = json.dig('record', 'receipt', 'key') || json.dig('record', 'metadata', 'key')
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('receipt', metadata_key)
       expect(result[:exitcode]).to eq(0)
@@ -206,11 +206,11 @@ RSpec.describe 'Onetime CLI', :cli do
     end
 
     it 'outputs receipt in JSON format with -j flag' do
-      output = `echo 'Receipt JSON test' | ruby -I#{lib_path} #{bin_path} -j share`
-      json = JSON.parse(output)
-      metadata_key = json['record']['metadata']['key']
+      share = run_cli('-j', 'share', stdin_data: "Receipt JSON test\n")
+      json = JSON.parse(share[:stdout])
+      metadata_key = json.dig('record', 'receipt', 'key') || json.dig('record', 'metadata', 'key')
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('-j', 'receipt', metadata_key)
       expect(result[:exitcode]).to eq(0)
@@ -223,23 +223,23 @@ RSpec.describe 'Onetime CLI', :cli do
     it 'handles invalid secret key gracefully' do
       result = run_cli('secret', 'invalidkey12345')
       expect(result[:exitcode]).to eq(1)
-      expect(result[:stderr]).to include('Unknown secret')
+      expect(result[:stderr]).to match(/MissingSecret|Unknown secret/)
     end
 
     it 'handles invalid receipt key gracefully' do
       result = run_cli('receipt', 'invalidmeta12345')
       expect(result[:exitcode]).to eq(1)
-      expect(result[:stderr]).to include('Unknown secret')
+      expect(result[:stderr]).to match(/MissingSecret|Unknown secret|identifier:/)
     end
   end
 
   describe 'command aliases', :integration do
     it 'uses get as alias for secret command' do
-      stdout, _stderr, status = Open3.capture3("echo 'Alias test' | ruby -I#{lib_path} #{bin_path} share")
-      expect(status.exitstatus).to eq(0)
-      secret_key = stdout.strip.split('/').last
+      share = run_cli('share', stdin_data: "Alias test\n")
+      expect(share[:exitcode]).to eq(0)
+      secret_key = share[:stdout].strip.split('/').last
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('get', secret_key)
       expect(result[:exitcode]).to eq(0)
@@ -249,25 +249,25 @@ RSpec.describe 'Onetime CLI', :cli do
 
   describe 'output formats', :integration do
     it 'outputs share in JSON format' do
-      stdout, _stderr, status = Open3.capture3("echo 'JSON share' | ruby -I#{lib_path} #{bin_path} -j share")
-      expect(status.exitstatus).to eq(0)
-      json = JSON.parse(stdout)
+      share = run_cli('-j', 'share', stdin_data: "JSON share\n")
+      expect(share[:exitcode]).to eq(0)
+      json = JSON.parse(share[:stdout])
       expect(json['success']).to be true
       expect(json['record']['secret']['key']).not_to be_nil
     end
 
     it 'outputs share in YAML format' do
-      stdout, _stderr, status = Open3.capture3("echo 'YAML share' | ruby -I#{lib_path} #{bin_path} -y share")
-      expect(status.exitstatus).to eq(0)
-      expect(stdout).to include('success:')
-      expect(stdout).to include('record:')
+      share = run_cli('-y', 'share', stdin_data: "YAML share\n")
+      expect(share[:exitcode]).to eq(0)
+      expect(share[:stdout]).to include('success:')
+      expect(share[:stdout]).to include('record:')
     end
 
     it 'outputs secret in JSON format' do
-      stdout, _stderr, _status = Open3.capture3("echo 'JSON retrieve' | ruby -I#{lib_path} #{bin_path} share")
-      secret_key = stdout.strip.split('/').last
+      share = run_cli('share', stdin_data: "JSON retrieve\n")
+      secret_key = share[:stdout].strip.split('/').last
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('-j', 'secret', secret_key)
       expect(result[:exitcode]).to eq(0)
@@ -276,10 +276,10 @@ RSpec.describe 'Onetime CLI', :cli do
     end
 
     it 'outputs secret in YAML format' do
-      stdout, _stderr, _status = Open3.capture3("echo 'YAML retrieve' | ruby -I#{lib_path} #{bin_path} share")
-      secret_key = stdout.strip.split('/').last
+      share = run_cli('share', stdin_data: "YAML retrieve\n")
+      secret_key = share[:stdout].strip.split('/').last
 
-      sleep 1
+      wait_for_rate_limit
 
       result = run_cli('-y', 'secret', secret_key)
       expect(result[:exitcode]).to eq(0)

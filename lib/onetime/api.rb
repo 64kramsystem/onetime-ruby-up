@@ -41,11 +41,12 @@ module Onetime
     base_uri 'https://eu.onetimesecret.com/api'
     format :json
     headers 'X-Onetime-Client' => 'ruby: %s/%s' % [RUBY_VERSION, Onetime::VERSION]
-    attr_reader :opts, :response, :custid, :key, :default_params, :anonymous
+    attr_reader :opts, :response, :custid, :key, :default_params, :anonymous, :apiversion
     def initialize custid=nil, key=nil, opts={}
       unless ENV['ONETIME_HOST'].to_s.empty?
         self.class.base_uri ENV['ONETIME_HOST']
       end
+      @apiversion = opts.delete(:apiversion) || opts.delete('apiversion') || 2
       @opts = opts
       @default_params = {}
       @custid = custid || ENV['ONETIME_CUSTID']
@@ -65,8 +66,15 @@ module Onetime
       opts[:query] = (params || {}).merge default_params
       execute_request :get, path, opts
     end
-    def post path, params=nil
+    def post path, params=nil, request_opts={}
       opts = self.opts.clone
+      wrap = if request_opts.key?(:wrap)
+        request_opts[:wrap]
+      elsif request_opts.key?('wrap')
+        request_opts['wrap']
+      else
+        :auto
+      end
       body_params = (params || {}).merge default_params
 
       # V2 API uses JSON format
@@ -75,9 +83,7 @@ module Onetime
         'Accept' => 'application/json'
       })
 
-      # Only /secret/conceal and /secret/generate wrap params in "secret" key
-      # Other endpoints (reveal, burn, etc.) do NOT wrap
-      if path =~ /\/secret\/(conceal|generate)$/
+      if wrap_secret_body?(path, wrap)
         body_params = { secret: body_params }
       end
 
@@ -86,16 +92,21 @@ module Onetime
       execute_request :post, path, opts
     end
     def api_path *args
-      args.unshift ['', 'v2'] # force leading slash and v2 version
+      args.unshift ['', "v#{apiversion}"] # force leading slash and version
       path = args.flatten.join('/')
       path.gsub(/\/+/, '/')
     end
     private
+    def wrap_secret_body?(path, wrap)
+      return false if wrap == false || wrap.nil?
+      return true if wrap == :secret
+      api_path(path).match?(%r{\A/v\d+/secret/(conceal|generate)/?\z})
+    end
+
     def execute_request meth, path, opts
       path = api_path [path]
       @response = self.class.send meth, path, opts
-      result = self.class.indifferent_params @response.parsed_response
-      result
+      self.class.indifferent_params @response.parsed_response
     end
     class << self
       def web_uri *args
@@ -127,6 +138,55 @@ module Onetime
       end
       def indifferent_hash
         Hash.new {|hash,key| hash[key.to_s] if Symbol === key }
+      end
+      def extract_secret_key(value, api_base_uri=base_uri)
+        return value unless value
+
+        uri = URI.parse(value.to_s)
+        return value unless uri.host && uri.path
+        return value unless accepted_secret_host?(uri.host, api_base_uri)
+
+        match = uri.path.match(%r{\A/secret/([a-zA-Z0-9]+)\z})
+        match ? match[1] : value
+      rescue URI::InvalidURIError
+        value
+      end
+
+      def response_error_message(response)
+        return 'Could not complete request' if response.nil?
+
+        # Symbol lookups preserve behavior for plain Ruby hashes even though
+        # parsed API responses usually support indifferent access.
+        ['message', :message, 'error', :error, 'field', :field].each do |key|
+          value = response[key] if response.respond_to?(:[])
+          return value.to_s unless value.to_s.empty?
+        end
+        response.to_s
+      end
+
+      def secret_key_from_response(response)
+        response&.dig('record', 'secret', 'key')
+      end
+
+      def receipt_key_from_response(response)
+        response&.dig('record', 'receipt', 'key') || response&.dig('record', 'metadata', 'key')
+      end
+
+      def recipients_from_response(response)
+        recipients = response&.dig('record', 'receipt', 'recipients')
+        if recipients.nil? || recipients == '' || (recipients.is_a?(Array) && recipients.empty?)
+          recipients = response&.dig('details', 'recipient')
+        end
+        Array(recipients).flatten.compact.reject { |recipient| recipient.to_s.empty? }
+      end
+
+      private
+
+      def accepted_secret_host?(host, api_base_uri)
+        configured_host = URI.parse(api_base_uri.to_s).host
+        host == configured_host || host == 'onetimesecret.com' || host.end_with?('.onetimesecret.com')
+      rescue URI::InvalidURIError
+        host == 'onetimesecret.com' || host.end_with?('.onetimesecret.com')
       end
     end
   end

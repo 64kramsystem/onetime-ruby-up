@@ -7,19 +7,31 @@ This directory contains integration tests that make real network calls to the On
 To run only the integration tests:
 
 ```bash
-bundle exec rspec spec/integration --tag integration
+ONETIME_INTEGRATION=1 bundle exec rspec spec/integration
 ```
 
-To run all tests (unit + integration):
+To run all tests without live network calls:
 
 ```bash
 bundle exec rspec
 ```
 
-To exclude integration tests and run only unit tests:
+To run all tests including live integration tests:
 
 ```bash
-bundle exec rspec --tag ~integration
+ONETIME_INTEGRATION=1 bundle exec rspec
+```
+
+To skip the one-second rate-limit waits during local experiments:
+
+```bash
+FAST=1 ONETIME_INTEGRATION=1 bundle exec rspec spec/integration
+```
+
+To validate selected assumptions against the official v2 OpenAPI document:
+
+```bash
+ONETIME_VALIDATE_OFFICIAL_SPEC=1 bundle exec rspec spec/official_api_contract_spec.rb
 ```
 
 ## Configuration
@@ -33,7 +45,7 @@ To test with authenticated API access, set these environment variables:
 ```bash
 export ONETIME_CUSTID="your@email.com"
 export ONETIME_APIKEY="your_api_key"
-bundle exec rspec spec/integration --tag integration
+ONETIME_INTEGRATION=1 bundle exec rspec spec/integration
 ```
 
 ### Custom Host
@@ -41,7 +53,7 @@ To test against a custom Onetime Secret instance:
 
 ```bash
 export ONETIME_HOST="https://your-instance.com/api"
-bundle exec rspec spec/integration --tag integration
+ONETIME_INTEGRATION=1 bundle exec rspec spec/integration
 ```
 
 ## Test Coverage
@@ -51,8 +63,8 @@ The integration test suite covers:
 - **Secret workflow**: Create and retrieve secrets
 - **Passphrase protection**: Create secrets with passphrases
 - **TTL (Time-to-Live)**: Create secrets with expiration times
-- **Metadata**: Retrieve and track secret metadata
-- **State tracking**: Verify secret state changes (new -> received)
+- **Receipt**: Retrieve and track secret receipt records
+- **State tracking**: Verify secret state changes
 - **Generate**: Generate random secrets
 - **Status**: Check service status
 
