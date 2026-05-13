@@ -11,10 +11,6 @@ RSpec.describe 'Onetime CLI', :cli do
     { stdout: stdout, stderr: stderr, status: status, exitcode: status.exitstatus }
   end
 
-  def wait_for_rate_limit
-    sleep 1 unless ENV['FAST']
-  end
-
   describe 'version command' do
     it 'shows version with -V flag' do
       result = run_cli('-V')

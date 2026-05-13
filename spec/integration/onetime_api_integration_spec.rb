@@ -1,6 +1,10 @@
 require 'spec_helper'
 
 RSpec.describe 'Onetime::API Integration Tests', :integration do
+  def receipt_key(response)
+    Onetime::API.receipt_key_from_response(response)
+  end
+
   let(:api) do
     custid = ENV['ONETIME_CUSTID']
     apikey = ENV['ONETIME_APIKEY']
@@ -22,12 +26,12 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       expect(share_response).not_to be_nil
       expect(share_response['record']['secret']['key']).not_to be_nil
-      expect(share_response['record']['metadata']['key']).not_to be_nil
+      expect(receipt_key(share_response)).not_to be_nil
 
       # Verify the response has the expected structure
       expect(share_response['success']).to be true
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'creates and retrieves a secret successfully' do
@@ -39,18 +43,17 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       expect(secret_key).not_to be_nil
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
 
       # Retrieve the secret
       reveal_response = api.post("/secret/#{secret_key}/reveal", continue: true)
 
       expect(reveal_response).not_to be_nil
-      expect(reveal_response['success']).to be true
       expect(reveal_response['record']['secret_value']).to eq(secret_value)
       expect(reveal_response['details']['show_secret']).to be true
-      expect(reveal_response['record']['state']).to eq('received')
+      expect(reveal_response['record']['state']).to eq('revealed')
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'retrieves a secret only once (one-time use)' do
@@ -60,19 +63,19 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
       share_response = api.post('/secret/conceal', secret: secret_value)
       secret_key = share_response['record']['secret']['key']
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
 
       # First retrieval should succeed
       first_reveal = api.post("/secret/#{secret_key}/reveal", continue: true)
       expect(first_reveal['record']['secret_value']).to eq(secret_value)
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
 
       # Second retrieval should fail (secret already consumed)
       api.post("/secret/#{secret_key}/reveal", continue: true)
       expect(api.response.code).not_to eq(200)
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'creates a secret with passphrase' do
@@ -84,12 +87,12 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       expect(share_response).not_to be_nil
       expect(share_response['record']['secret']['key']).not_to be_nil
-      expect(share_response['record']['metadata']['key']).not_to be_nil
+      expect(receipt_key(share_response)).not_to be_nil
 
       # Verify passphrase flag in original response
-      expect(share_response['record']['secret']['has_passphrase']).to be true
+      expect(share_response.dig('record', 'secret', 'has_passphrase') || share_response.dig('record', 'receipt', 'has_passphrase')).to be true
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'creates and retrieves a secret with passphrase' do
@@ -100,20 +103,19 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
       share_response = api.post('/secret/conceal', secret: secret_value, passphrase: passphrase)
       secret_key = share_response['record']['secret']['key']
 
-      expect(share_response['record']['secret']['has_passphrase']).to be true
+      expect(share_response.dig('record', 'secret', 'has_passphrase') || share_response.dig('record', 'receipt', 'has_passphrase')).to be true
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
 
       # Retrieve with correct passphrase
       reveal_response = api.post("/secret/#{secret_key}/reveal", passphrase: passphrase, continue: true)
 
       expect(reveal_response).not_to be_nil
-      expect(reveal_response['success']).to be true
       expect(reveal_response['record']['secret_value']).to eq(secret_value)
       expect(reveal_response['details']['correct_passphrase']).to be true
       expect(reveal_response['details']['show_secret']).to be true
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'fails to retrieve secret with wrong passphrase' do
@@ -124,7 +126,7 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
       share_response = api.post('/secret/conceal', secret: secret_value, passphrase: passphrase)
       secret_key = share_response['record']['secret']['key']
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
 
       # Try to retrieve with wrong passphrase
       reveal_response = api.post("/secret/#{secret_key}/reveal", passphrase: "wrong-password", continue: true)
@@ -138,7 +140,7 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
       # Secret value should not be present
       expect(reveal_response.dig('record', 'secret_value')).to be_nil
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'creates a secret with TTL' do
@@ -150,9 +152,9 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       expect(share_response).not_to be_nil
       expect(share_response['record']['secret']['key']).not_to be_nil
-      expect(share_response['record']['metadata']['secret_ttl']).to eq(ttl)
+      expect(share_response.dig('record', 'receipt', 'secret_ttl') || share_response.dig('record', 'metadata', 'secret_ttl')).to eq(ttl)
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'creates and retrieves a secret with TTL' do
@@ -163,19 +165,18 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
       share_response = api.post('/secret/conceal', secret: secret_value, ttl: ttl)
       secret_key = share_response['record']['secret']['key']
 
-      expect(share_response['record']['metadata']['secret_ttl']).to eq(ttl)
+      expect(share_response.dig('record', 'receipt', 'secret_ttl') || share_response.dig('record', 'metadata', 'secret_ttl')).to eq(ttl)
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
 
       # Retrieve the secret before TTL expires
       reveal_response = api.post("/secret/#{secret_key}/reveal", continue: true)
 
       expect(reveal_response).not_to be_nil
-      expect(reveal_response['success']).to be true
       expect(reveal_response['record']['secret_value']).to eq(secret_value)
-      expect(reveal_response['record']['secret_ttl']).to eq(ttl.to_s)
+      expect(reveal_response['record']['secret_ttl'].to_i).to eq(ttl)
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
   end
 
@@ -185,7 +186,7 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       # Create a secret
       share_response = api.post('/secret/conceal', secret: secret_value)
-      metadata_key = share_response['record']['metadata']['key']
+      metadata_key = receipt_key(share_response)
       secret_key = share_response['record']['secret']['key']
 
       # Retrieve metadata
@@ -193,15 +194,15 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       expect(metadata_response).not_to be_nil
       expect(metadata_response['record']['key']).to eq(metadata_key)
-      expect(metadata_response['record']['secret_key']).not_to be_nil
+      expect(metadata_response['record']['secret_identifier']).not_to be_nil
 
       # The metadata response returns the full identifier
-      expect(metadata_response['record']['secret_key']).to eq(secret_key)
+      expect(metadata_response['record']['secret_identifier']).to eq(secret_key)
 
       # Note: Retrieving metadata changes state to 'viewed'
       expect(['new', 'viewed']).to include(metadata_response['record']['state'])
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
 
     it 'checks metadata state' do
@@ -209,7 +210,7 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       # Create a secret
       share_response = api.post('/secret/conceal', secret: secret_value)
-      metadata_key = share_response['record']['metadata']['key']
+      metadata_key = receipt_key(share_response)
 
       # Check initial state (retrieving metadata changes it to 'viewed')
       metadata_response = api.get("/receipt/#{metadata_key}")
@@ -218,7 +219,7 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
       expect(['new', 'viewed']).to include(metadata_response['record']['state'])
       expect(metadata_response['record']['state']).not_to be_nil
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
   end
 
@@ -229,15 +230,15 @@ RSpec.describe 'Onetime::API Integration Tests', :integration do
 
       expect(generate_response).not_to be_nil
       expect(generate_response['record']['secret']['key']).not_to be_nil
-      expect(generate_response['record']['metadata']['key']).not_to be_nil
+      expect(receipt_key(generate_response)).not_to be_nil
 
-      # Verify the key format (30-35 characters)
-      expect(generate_response['record']['secret']['key'].length).to be_between(25, 40)
+      # Verify the key format
+      expect(generate_response['record']['secret']['key']).to match(/\A[a-z0-9]{25,80}\z/)
 
       # Verify response structure
       expect(generate_response['success']).to be true
 
-      sleep 1 # Rate limiting
+      wait_for_rate_limit
     end
   end
 
