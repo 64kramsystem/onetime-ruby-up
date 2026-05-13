@@ -28,7 +28,6 @@ Gem::Specification.new do |s|
   s.executables   = Dir["bin/*"].map { |f| File.basename(f) }
   s.require_paths = ["lib"]
 
-  s.add_runtime_dependency "drydock", "~> 1.0.0"
   s.add_runtime_dependency "httparty", "~> 0.24.2"
 
   s.add_development_dependency "rspec", "~> 3.0"
