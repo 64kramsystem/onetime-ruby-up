@@ -42,7 +42,7 @@ module Onetime
 
       def configure_api!
         OT::API.base_uri @parsed.base_uri if @parsed.base_uri
-        OT::API.debug_output STDERR if @parsed.debug
+        OT::API.debug_output @stderr if @parsed.debug
         @api = OT::API.new(@parsed.custid, @parsed.apikey)
       end
 
@@ -99,7 +99,12 @@ module Onetime
       end
 
       def run_share
-        secret_value = read_share_input
+        begin
+          secret_value = read_share_input
+        rescue Interrupt
+          @stdout.puts 'Exiting...'
+          return 0
+        end
         raise Error, 'No secret provided' if secret_value.chomp.empty?
 
         opts = { secret: secret_value, ttl: @parsed.ttl, recipient: @parsed.recipients }
@@ -126,7 +131,7 @@ module Onetime
 
       def read_share_input
         if !@parsed.argv.empty?
-          read_argv_files(@parsed.argv)
+          read_argv_inputs(@parsed.argv)
         elsif !@stdin.tty?
           @stdin.read
         else
@@ -135,13 +140,10 @@ module Onetime
           @stderr.puts
           content
         end
-      rescue Interrupt
-        @stdout.puts 'Exiting...'
-        ''
       end
 
-      def read_argv_files(paths)
-        paths.map { |path| File.read(path) }.join
+      def read_argv_inputs(paths)
+        paths.map { |path| path == '-' ? @stdin.read : File.read(path) }.join
       end
 
       def emit_share_result(res)

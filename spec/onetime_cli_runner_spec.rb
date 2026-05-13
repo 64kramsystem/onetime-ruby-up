@@ -76,5 +76,48 @@ RSpec.describe Onetime::CLI::Runner do
       expect(result[:exitcode]).to eq(1)
       expect(result[:stderr]).to match(/No secret provided/i)
     end
+
+    it 'exits cleanly when share input is interrupted' do
+      stdin = double('stdin')
+      allow(stdin).to receive(:tty?).and_return(true)
+      allow(stdin).to receive(:read).and_raise(Interrupt)
+      stdout = StringIO.new
+      stderr = StringIO.new
+      exitcode = described_class.new(
+        parsed(command: 'share'),
+        stdin: stdin, stdout: stdout, stderr: stderr
+      ).run
+      expect(exitcode).to eq(0)
+      expect(stdout.string).to match(/Exiting/i)
+    end
+  end
+
+  describe 'share input routing' do
+    it 'reads stdin when a "-" positional arg is passed' do
+      stdin = StringIO.new("piped-payload\n")
+      stdout = StringIO.new
+      stderr = StringIO.new
+      runner = described_class.new(
+        parsed(command: 'share', argv: ['-']),
+        stdin: stdin, stdout: stdout, stderr: stderr
+      )
+      # Stub the API call so we can assert on the payload passed in
+      api = double('api')
+      response = double('response', code: 200)
+      payload = nil
+      allow(api).to receive(:post) do |_, opts|
+        payload = opts[:secret]
+        { 'record' => { 'secret' => { 'key' => 'abc' } } }
+      end
+      allow(api).to receive(:response).and_return(response)
+      allow(OT::API).to receive(:new).and_return(api)
+      allow(OT::API).to receive(:secret_key_from_response).and_return('abc')
+      allow(OT::API).to receive(:web_uri).and_return('https://example.com/secret/abc')
+      allow(OT::API).to receive(:recipients_from_response).and_return([])
+
+      exitcode = runner.run
+      expect(exitcode).to eq(0)
+      expect(payload).to eq("piped-payload\n")
+    end
   end
 end
