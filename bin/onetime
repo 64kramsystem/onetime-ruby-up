@@ -51,7 +51,7 @@ class Onetime::CLI
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
-        raise RuntimeError, @res['message']
+        raise RuntimeError, OT::API.response_error_message(@res)
       end
       case obj.global.format
       when 'json'
@@ -79,7 +79,7 @@ class Onetime::CLI
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
-        raise RuntimeError, @res['message']
+        raise RuntimeError, OT::API.response_error_message(@res)
       end
       case obj.global.format
       when 'json'
@@ -104,15 +104,12 @@ class Onetime::CLI
 
       opts = { continue: true }
       opts[:passphrase] = obj.option.passphrase if obj.option.passphrase
-      base_uri = URI.parse Onetime::API.base_uri
-      if secret_key =~ /#{base_uri.hostname}\/secret\/([a-zA-Z0-9]+)/
-        secret_key = $1
-      end
+      secret_key = OT::API.extract_secret_key(secret_key)
       @res = @api.post '/secret/%s/reveal' % [secret_key], opts
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
-        raise RuntimeError, @res['message']
+        raise RuntimeError, OT::API.response_error_message(@res)
       end
       case obj.global.format
       when 'json'
@@ -154,9 +151,10 @@ class Onetime::CLI
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
-        raise RuntimeError, @res['message']
+        raise RuntimeError, OT::API.response_error_message(@res)
       end
-      secret_key = @res['record']['secret']['key']
+      secret_key = OT::API.secret_key_from_response(@res)
+      raise RuntimeError, 'Unexpected response: missing record.secret.key' unless secret_key
       uri = OT::API.web_uri('secret', secret_key)
       case obj.global.format
       when 'json'
@@ -164,9 +162,9 @@ class Onetime::CLI
       when 'yaml'
         puts @res.to_yaml
       else
-        recipient = @res['details']['recipient']
-        if recipient && !recipient.compact.empty?
-          STDERR.puts '# Secret link sent to: %s' % recipient.join(',')
+        recipients = OT::API.recipients_from_response(@res)
+        if !recipients.empty?
+          STDERR.puts '# Secret link sent to: %s' % recipients.join(',')
         else
           puts uri
         end
@@ -186,9 +184,10 @@ class Onetime::CLI
       if @res.nil?
         raise RuntimeError, 'Could not complete request'
       elsif @api.response.code != 200
-        raise RuntimeError, @res['message']
+        raise RuntimeError, OT::API.response_error_message(@res)
       end
-      secret_key = @res['record']['secret']['key']
+      secret_key = OT::API.secret_key_from_response(@res)
+      raise RuntimeError, 'Unexpected response: missing record.secret.key' unless secret_key
       uri = OT::API.web_uri('secret', secret_key)
       case obj.global.format
       when 'json'
@@ -198,9 +197,9 @@ class Onetime::CLI
       when 'csv'
         puts uri
       else
-        recipient = @res['details']['recipient']
-        if recipient && !recipient.compact.empty?
-          STDERR.puts '# Secret link sent to: %s' % recipient.join(',')
+        recipients = OT::API.recipients_from_response(@res)
+        if !recipients.empty?
+          STDERR.puts '# Secret link sent to: %s' % recipients.join(',')
         else
           puts uri
         end
