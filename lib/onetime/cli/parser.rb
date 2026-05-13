@@ -37,7 +37,8 @@ module Onetime
         @base_uri = nil
         @custid = nil
         @apikey = nil
-        @recipients = []
+        @global_recipients = []
+        @command_recipients = []
         @format = nil
         @debug = false
         @show_version = false
@@ -62,7 +63,7 @@ module Onetime
           base_uri: @base_uri,
           custid: @custid,
           apikey: @apikey,
-          recipients: @recipients,
+          recipients: (@command_recipients + @global_recipients).uniq,
           format: @format,
           debug: @debug,
           show_version: @show_version,
@@ -80,7 +81,7 @@ module Onetime
           opts.on('-H BASE_URI', String) { |v| @base_uri = v }
           opts.on('-c CUSTID', '--custid CUSTID', String) { |v| @custid = v }
           opts.on('-k APIKEY', '--apikey APIKEY', String) { |v| @apikey = v }
-          opts.on('-r RECIPIENT', '--recipient RECIPIENT', Array) { |v| @recipients.concat(Array(v)) }
+          opts.on('-r RECIPIENT', '--recipient RECIPIENT', Array) { |v| @global_recipients.concat(Array(v)) }
           opts.on('-f FORMAT', '--format FORMAT', String) { |v| @format = v }
           opts.on('-j', '--json') { @json_flag = true }
           opts.on('-y', '--yaml') { @yaml_flag = true }
@@ -100,7 +101,7 @@ module Onetime
             opts.on('-p PASSPHRASE', '--passphrase PASSPHRASE', String) { |v| @passphrase = v }
           end
           if allowed.include?(:recipient)
-            opts.on('-r RECIPIENT', '--recipient RECIPIENT', Array) { |v| @recipients.concat(Array(v)) }
+            opts.on('-r RECIPIENT', '--recipient RECIPIENT', Array) { |v| @command_recipients.concat(Array(v)) }
           end
         end
       end

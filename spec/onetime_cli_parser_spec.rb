@@ -118,10 +118,12 @@ RSpec.describe Onetime::CLI::Parser do
 
     it 'accepts -r/--recipient as a command-level option' do
       expect(parse('share', '-r', 'a@x.com').recipients).to eq(['a@x.com'])
+      expect(parse('generate', '-r', 'a@x.com').recipients).to eq(['a@x.com'])
     end
 
-    it 'combines global and command-level recipients in order' do
-      expect(parse('-r', 'a@x.com', 'share', '-r', 'b@x.com').recipients).to eq(['a@x.com', 'b@x.com'])
+    it 'merges command-level recipients before global recipients, deduplicating' do
+      expect(parse('-r', 'a@x.com', 'share', '-r', 'b@x.com').recipients).to eq(['b@x.com', 'a@x.com'])
+      expect(parse('-r', 'a@x.com', 'share', '-r', 'a@x.com').recipients).to eq(['a@x.com'])
     end
 
     it 'splits comma-separated recipient values' do
