@@ -96,5 +96,53 @@ RSpec.describe Onetime::CLI::Parser do
     it 'returns no positional args when none are given' do
       expect(parse('status').argv).to eq([])
     end
+
+    it 'consumes command-level option flags so they do not leak into argv' do
+      expect(parse('secret', '-p', 'pass', 'KEY1').argv).to eq(['KEY1'])
+      expect(parse('share', '-t', '3600').argv).to eq([])
+      expect(parse('generate', '-p', 'pass').argv).to eq([])
+    end
+  end
+
+  describe 'command-level options' do
+    it 'parses -t/--ttl for share and generate' do
+      expect(parse('share', '-t', '3600').ttl).to eq(3600)
+      expect(parse('generate', '--ttl', '7200').ttl).to eq(7200)
+    end
+
+    it 'parses -p/--passphrase for secret, share and generate' do
+      expect(parse('secret', '-p', 'pass', 'KEY').passphrase).to eq('pass')
+      expect(parse('share', '--passphrase', 'shh').passphrase).to eq('shh')
+      expect(parse('generate', '-p', 'gen').passphrase).to eq('gen')
+    end
+
+    it 'accepts -r/--recipient as a command-level option' do
+      expect(parse('share', '-r', 'a@x.com').recipients).to eq(['a@x.com'])
+    end
+
+    it 'combines global and command-level recipients in order' do
+      expect(parse('-r', 'a@x.com', 'share', '-r', 'b@x.com').recipients).to eq(['a@x.com', 'b@x.com'])
+    end
+
+    it 'splits comma-separated recipient values' do
+      expect(parse('share', '-r', 'a@x.com,b@x.com').recipients).to eq(['a@x.com', 'b@x.com'])
+    end
+
+    it 'rejects command-level options on commands that do not declare them' do
+      expect { parse('status', '-t', '3600') }.to raise_error(Onetime::CLI::Parser::Error)
+      expect { parse('receipt', '-p', 'pass', 'KEY') }.to raise_error(Onetime::CLI::Parser::Error)
+    end
+  end
+
+  describe 'format flag precedence (drydock compatibility)' do
+    it 'lets -s win over both -j and -y regardless of order' do
+      expect(parse('-y', '-j', '-s', 'status').format).to be_nil
+      expect(parse('-s', '-j', '-y', 'status').format).to be_nil
+    end
+
+    it 'lets -j win over -y regardless of order' do
+      expect(parse('-y', '-j', 'status').format).to eq('json')
+      expect(parse('-j', '-y', 'status').format).to eq('json')
+    end
   end
 end
